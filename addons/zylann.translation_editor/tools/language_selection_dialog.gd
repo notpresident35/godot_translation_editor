@@ -1,23 +1,22 @@
-tool
-extends WindowDialog
+@tool
+extends AcceptDialog
 
 const Locales = preload("./locales.gd")
 
 signal language_selected(language)
 
-onready var _filter_edit : LineEdit = $VBoxContainer/FilterEdit
-onready var _languages_list : Tree = $VBoxContainer/LanguagesList
-onready var _ok_button : Button = $VBoxContainer/Buttons/OkButton
+@onready var _filter_edit : LineEdit = $VBoxContainer/FilterEdit
+@onready var _languages_list : Tree = $VBoxContainer/LanguagesList
 
 var _hidden_locales := []
 
 
 func configure(hidden_locales):
 	_hidden_locales = hidden_locales
-	_refresh_list()
+	refresh_list()
 
 
-func _refresh_list():
+func refresh_list():
 	_languages_list.clear()
 	
 	var filter := _filter_edit.text.strip_edges()
@@ -35,34 +34,34 @@ func _refresh_list():
 		item.set_text(0, locale[0])
 		item.set_text(1, locale[1])
 	
-	_ok_button.disabled = true
+	get_ok_button().disabled = true
 
 
-func _submit():
+func submit():
 	var item := _languages_list.get_selected()
 	emit_signal("language_selected", item.get_text(0))
 	hide()
 
 
-func _on_OkButton_pressed():
-	_submit()
+func _on_confirmed():
+	submit()
 
 
-func _on_CancelButton_pressed():
+func _on_canceled():
 	hide()
 
 
 func _on_LanguagesList_item_selected():
-	_ok_button.disabled = false
+	get_ok_button().disabled = false
 
 
 func _on_LanguagesList_nothing_selected():
-	_ok_button.disabled = true
+	get_ok_button().disabled = true
 
 
 func _on_LanguagesList_item_activated():
-	_submit()
+	submit()
 
 
 func _on_FilterEdit_text_changed(new_text):
-	_refresh_list()
+	refresh_list()

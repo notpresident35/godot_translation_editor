@@ -1,37 +1,44 @@
-tool
-extends WindowDialog
+@tool
+extends AcceptDialog
 
 const Extractor = preload("./extractor.gd")
 const Logger = preload("./util/logger.gd")
 
 signal import_selected(strings)
 
-onready var _root_path_edit : LineEdit = $VB/HB/RootPathEdit
-onready var _excluded_dirs_edit : LineEdit = $VB/HB2/ExcludedDirsEdit
-onready var _prefix_edit : LineEdit = $VB/HB3/PrefixLineEdit
-onready var _summary_label : Label = $VB/StatusBar/SummaryLabel
-onready var _results_list : Tree = $VB/Results
-onready var _progress_bar : ProgressBar = $VB/StatusBar/ProgressBar
-onready var _extract_button : Button = $VB/Buttons/ExtractButton
-onready var _import_button : Button = $VB/Buttons/ImportButton
+@onready var _root_path_edit : LineEdit = $VB/HB/RootPathEdit
+@onready var _excluded_dirs_edit : LineEdit = $VB/HB2/ExcludedDirsEdit
+@onready var _prefix_edit : LineEdit = $VB/HB3/PrefixLineEdit
+@onready var _summary_label : Label = $VB/StatusBar/SummaryLabel
+@onready var _results_list : Tree = $VB/Results
+@onready var _progress_bar : ProgressBar = $VB/StatusBar/ProgressBar
+@onready var _extract_button : Button = $VB/Buttons/ExtractButton
+@onready var _import_button : Button = $VB/Buttons/ImportButton
 
 var _extractor : Extractor = null
 # { string => { fpath => line number } }
 var _results := {}
-var _registered_string_filter : FuncRef = null
+var _registered_string_filter : Callable
 var _logger = Logger.get_for(self)
 
+var deferred_notif = false
 
 func _ready():
 	_import_button.disabled = true
+	if deferred_notif:
+		deferred_notif = false
+		_notification(NOTIFICATION_VISIBILITY_CHANGED)
 
 
-func set_registered_string_filter(registered_string_filter: FuncRef):
+func set_registered_string_filter(registered_string_filter: Callable):
 	_registered_string_filter = registered_string_filter
 
 
 func _notification(what: int):
 	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		if not _root_path_edit:
+			deferred_notif = true
+			return
 		if visible:
 			_summary_label.text = ""
 			_results.clear()
@@ -59,8 +66,7 @@ func _on_ExtractButton_pressed():
 		return
 	
 	var root := _root_path_edit.text.strip_edges()
-	var d := Directory.new()
-	if not d.dir_exists(root):
+	if not DirAccess.open(root):
 		_logger.error("Directory {0} does not exist".format([root]))
 		return
 	
@@ -71,8 +77,8 @@ func _on_ExtractButton_pressed():
 	var prefix := _prefix_edit.text.strip_edges()
 	
 	_extractor = Extractor.new()
-	_extractor.connect("progress_reported", self, "_on_Extractor_progress_reported")
-	_extractor.connect("finished", self, "_on_Extractor_finished")
+	_extractor.connect("progress_reported", _on_Extractor_progress_reported)
+	_extractor.connect("finished", _on_Extractor_finished)
 	_extractor.extract_async(root, excluded_dirs, prefix)
 	
 	_progress_bar.value = 0
@@ -114,7 +120,7 @@ func _on_Extractor_finished(results: Dictionary):
 	if _registered_string_filter != null:
 		var texts := results.keys()
 		for text in texts:
-			if _registered_string_filter.call_func(text):
+			if _registered_string_filter.call(text):
 				results.erase(text)
 				registered_set[text] = true
 	

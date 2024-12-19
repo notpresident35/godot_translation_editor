@@ -23,7 +23,7 @@ const _prefix_exclusive := true
 func extract_async(root: String, ignored_paths := [], prefix := ""):
 	_prepare(root, ignored_paths, prefix)
 	_thread = Thread.new()
-	_thread.start(self, "_extract_thread_func", root)
+	_thread.start(_extract_thread_func.bind(root))
 
 
 func extract(root: String, ignored_paths := [], prefix := "") -> Dictionary:
@@ -33,12 +33,12 @@ func extract(root: String, ignored_paths := [], prefix := "") -> Dictionary:
 
 
 func _prepare(root: String, ignored_paths: Array, prefix: String):
-	_time_before = OS.get_ticks_msec()
+	_time_before = Time.get_ticks_msec()
 	assert(_thread == null)
 	
 	_ignored_paths.clear()
 	for p in ignored_paths:
-		_ignored_paths[root.plus_file(p)] = true
+		_ignored_paths[root.path_join(p)] = true
 
 	_prefix = prefix
 	
@@ -46,15 +46,14 @@ func _prepare(root: String, ignored_paths: Array, prefix: String):
 
 
 func _extract(root: String):
-	_walk(root, funcref(self, "_index_file"), funcref(self, "_filter"), _logger)
+	_walk(root, _index_file, _filter, _logger)
 	
 	for i in len(_paths):
 		var fpath : String = _paths[i]
-		var f := File.new()
-		var err := f.open(fpath, File.READ)
-		if err != OK:
-			_logger.error("Could not open {0} for read, error {1}".format([fpath, err]))
-			continue
+		var f := FileAccess.open(fpath, FileAccess.READ)
+		if not f:
+			_logger.error("Could not open " + fpath + " for write")
+			return
 		var ext := fpath.get_extension()
 		match ext:
 			"tscn":
@@ -81,7 +80,7 @@ func _report_progress(ratio: float):
 func _finished():
 	_thread.wait_to_finish()
 	_thread = null
-	var elapsed := float(OS.get_ticks_msec() - _time_before) / 1000.0
+	var elapsed := float(Time.get_ticks_msec() - _time_before) / 1000.0
 	_logger.debug(str("Extraction took ", elapsed, " seconds"))
 	emit_signal("finished", _strings)
 
@@ -102,7 +101,7 @@ func _index_file(fpath: String):
 	_paths.append(fpath)
 
 
-func _process_tscn(f: File, fpath: String):
+func _process_tscn(f: FileAccess, fpath: String):
 	var patterns := [
 		"text =",
 		"window_title =",
@@ -181,7 +180,7 @@ func _process_tscn(f: File, fpath: String):
 					text = str(text, line, "\n")
 
 
-func _process_gd(f: File, fpath: String):
+func _process_gd(f: FileAccess, fpath: String):
 	var text := ""
 	var line_number := 0
 	
@@ -244,7 +243,7 @@ func _process_gd(f: File, fpath: String):
 					# No quote found in entire line, skip
 					break
 			
-			var end_quote_index := _find_unescaped_quote(line, begin_quote_index + 1)
+			var end_quote_index := find_unescaped_quote(line, begin_quote_index + 1)
 			if end_quote_index == -1:
 				# Multiline or procedural strings not supported
 				_logger.error("End quote not found in {0}, line {1}".format([fpath, line_number]))
@@ -267,7 +266,7 @@ func _process_gd(f: File, fpath: String):
 			assert(counter < 100)
 
 
-func _process_quoted_text_generic(f: File, fpath: String):
+func _process_quoted_text_generic(f: FileAccess, fpath: String):
 	var pattern := str("\"", _prefix)
 	var line_number := 0
 	
@@ -282,7 +281,7 @@ func _process_quoted_text_generic(f: File, fpath: String):
 				break
 			
 			var begin_quote_index := i
-			var end_quote_index := _find_unescaped_quote(line, begin_quote_index + 1)
+			var end_quote_index := find_unescaped_quote(line, begin_quote_index + 1)
 			if end_quote_index == -1:
 				break
 			
@@ -293,7 +292,7 @@ func _process_quoted_text_generic(f: File, fpath: String):
 			search_index = end_quote_index + 1
 
 
-static func _find_unescaped_quote(s, from) -> int:
+static func find_unescaped_quote(s, from) -> int:
 	while true:
 		var i = s.find('"', from)
 		if i <= 0:
@@ -310,22 +309,20 @@ func _add_string(file: String, line_number: int, text: String):
 	_strings[text][file] = line_number
 
 
-static func _walk(folder_path: String, file_action: FuncRef, filter: FuncRef, logger):
+static func _walk(folder_path: String, file_action: Callable, filter: Callable, logger):
 	#print("Walking dir ", folder_path)
-	var d := Directory.new()
-	var err := d.open(folder_path)
-	if err != OK:
-		logger.error("Could not open directory {0}, error {1}".format([folder_path, err]))
+	var d := DirAccess.open(folder_path)
+	if not d:
+		logger.error("Could not open directory " + folder_path)
 		return
-	d.list_dir_begin(true, true)
+	d.list_dir_begin()
 	var fname := d.get_next()
 	while fname != "":
-		var fullpath := folder_path.plus_file(fname)
-		if filter == null or filter.call_func(fullpath) == true:
+		var fullpath := folder_path.path_join(fname)
+		if filter == null or filter.call(fullpath) == true:
 			if d.current_is_dir():
 				_walk(fullpath, file_action, filter, logger)
 			else:
-				file_action.call_func(fullpath)
+				file_action.call(fullpath)
 		fname = d.get_next()
 	return
-

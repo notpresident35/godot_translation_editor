@@ -16,9 +16,6 @@ class Base:
 
 
 class Verbose extends Base:
-	func _init(p_context: String).(p_context):
-		pass
-		
 	func debug(msg: String):
 		print(_context, ": ", msg)
 
@@ -33,4 +30,3 @@ static func get_for(owner: Object) -> Base:
 	if OS.is_stdout_verbose():
 		return Verbose.new(context)
 	return Base.new(context)
-

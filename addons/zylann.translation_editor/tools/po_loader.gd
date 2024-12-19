@@ -1,4 +1,4 @@
-tool
+@tool
 
 const STATE_NONE = 0
 const STATE_MSGID = 1
@@ -10,21 +10,16 @@ static func load_po_translation(folder_path: String, valid_locales: Array, logge
 	var config := {}
 	
 	# TODO Get languages from configs, not from filenames
-	var languages := _get_languages_in_folder(folder_path, valid_locales, logger)
+	var languages := get_languages_in_folder(folder_path, valid_locales, logger)
 	
 	if len(languages) == 0:
 		logger.error("No .po languages were found in {0}".format([folder_path]))
 		return all_strings
 	
 	for language in languages:
-		var filepath := folder_path.plus_file(str(language, ".po"))
+		var filepath := folder_path.path_join(str(language, ".po"))
 		
-		var f := File.new()
-		var err := f.open(filepath, File.READ)
-		if err != OK:
-			logger.error("Could not open file {0} for read, error {1}".format([filepath, err]))
-			return null
-		
+		var f := FileAccess.open(filepath, FileAccess.READ)
 		f.store_line("")
 		
 		var state := STATE_NONE
@@ -116,24 +111,14 @@ static func _parse_config(text: String, logger) -> Dictionary:
 	return config
 
 
-class _Sorter:
-	func sort(a: Array, b: Array):
-		return a[0] < b[0]
-
-
 static func save_po_translations(folder_path: String, translations: Dictionary, 
 	languages_to_save: Array, logger) -> Array:
 		
-	var sorter := _Sorter.new()
 	var saved_languages := []
 	
 	for language in languages_to_save:
-		var f := File.new()
-		var filepath := folder_path.plus_file(str(language, ".po"))
-		var err := f.open(filepath, File.WRITE)
-		if err != OK:
-			logger.error("Could not open file {0} for write, error {1}".format([filepath, err]))
-			continue
+		var filepath := folder_path.path_join(str(language, ".po"))
+		var f := FileAccess.open(filepath, FileAccess.WRITE)
 		
 		# TODO Take as argument
 		var config := {
@@ -160,7 +145,7 @@ static func save_po_translations(folder_path: String, translations: Dictionary,
 				continue
 			items.append([id, s.translations[language], s.comments])
 		
-		items.sort_custom(sorter, "sort")
+		items.sort_custom(func(a,b): return a[0] < b[0])
 				
 		for item in items:
 			var comment : String = item[2]
@@ -180,14 +165,14 @@ static func save_po_translations(folder_path: String, translations: Dictionary,
 	return saved_languages
 
 
-static func _write_msg(f: File, msgtype: String, msg: String):
+static func _write_msg(f: FileAccess, msgtype: String, msg: String):
 	var lines := msg.split("\n")
 	# `split` removes the newlines, so we'll add them back.
 	# Empty lines may happen if the original text has multiple successsive line breaks.
 	# However, if the text ends with a newline, it will produce an empty string at the end,
 	# which we don't want. Repro: "\n".split("\n") produces ["", ""].
 	if len(lines) > 0 and lines[-1] == "":
-		lines.remove(len(lines) - 1)
+		lines.remove_at(len(lines) - 1)
 	
 	if len(lines) > 1:
 		for i in range(0, len(lines) - 1):
@@ -217,13 +202,9 @@ static func _write_msg(f: File, msgtype: String, msg: String):
 		f.store_line(str(" \"", lines[i], "\""))
 
 
-static func _get_languages_in_folder(folder_path: String, valid_locales: Array, logger) -> Array:
+static func get_languages_in_folder(folder_path: String, valid_locales: Array, logger) -> Array:
 	var result := []
-	var d := Directory.new()
-	var err := d.open(folder_path)
-	if err != OK:
-		logger.error("Could not open directory {0}, error {1}".format([folder_path, err]))
-		return result
+	var d := DirAccess.open(folder_path)
 	d.list_dir_begin()
 	var fname := d.get_next()
 	while fname != "":

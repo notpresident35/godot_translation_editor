@@ -1,11 +1,10 @@
-tool
+@tool
 
 # TODO Can't type nullable return value
 static func load_csv_translation(filepath: String, logger):
-	var f := File.new()
-	var err := f.open(filepath, File.READ)
-	if err != OK:
-		logger.error("Could not open {0} for read, code {1}".format([filepath, err]))
+	var f := FileAccess.open(filepath, FileAccess.READ)
+	if not f:
+		logger.error("Could not open " + filepath + " for read")
 		return null
 	
 	var first_row := f.get_csv_line()
@@ -13,7 +12,7 @@ static func load_csv_translation(filepath: String, logger):
 		logger.error("Translation file is missing the `id` column")
 		return null
 	
-	var languages := PoolStringArray()
+	var languages := PackedStringArray()
 	for i in range(1, len(first_row)):
 		languages.append(first_row[i])
 	
@@ -22,13 +21,13 @@ static func load_csv_translation(filepath: String, logger):
 	while not f.eof_reached():
 		var row := f.get_csv_line()
 		if len(row) < 1 or row[0].strip_edges() == "":
-			logger.error("Found an empty row")
+			logger.warn("Found an empty row")
 			continue
 		if len(row) < len(first_row):
 			logger.debug("Found row smaller than header, resizing")
 			row.resize(len(first_row))
 		ids.append(row[0])
-		var trans = PoolStringArray()
+		var trans = PackedStringArray()
 		for i in range(1, len(row)):
 			trans.append(row[i])
 		rows.append(trans)
@@ -42,11 +41,6 @@ static func load_csv_translation(filepath: String, logger):
 		translations[ids[i]] = { "translations": t, "comments": "" }
 	
 	return translations
-
-
-class _Sorter:
-	func sort(a: Array, b: Array):
-		return a[0] < b[0]
 
 
 static func save_csv_translation(filepath: String, data: Dictionary, logger) -> Array:
@@ -86,15 +80,13 @@ static func save_csv_translation(filepath: String, data: Dictionary, logger) -> 
 		rows[row_index] = row
 		row_index += 1
 		
-	var sorter := _Sorter.new()
-	rows.sort_custom(sorter, "sort")
+	rows.sort_custom(func(a,b): return a[0] < b[0])
 
 	var delim := ","
 
-	var f := File.new()
-	var err := f.open(filepath, File.WRITE)
-	if err != OK:
-		logger.error("Could not open {0} for write, code {1}".format([filepath, err]))
+	var f := FileAccess.open(filepath, FileAccess.WRITE)
+	if not f:
+		logger.error("Could not open " + filepath + " for write")
 		return []
 
 	store_csv_line(f, first_row)
@@ -107,7 +99,7 @@ static func save_csv_translation(filepath: String, data: Dictionary, logger) -> 
 	return saved_languages
 
 
-static func store_csv_line(f: File, a: Array, delim := ","):
+static func store_csv_line(f: FileAccess, a: Array, delim := ","):
 	for i in len(a):
 		if i > 0:
 			f.store_string(",")
@@ -117,4 +109,3 @@ static func store_csv_line(f: File, a: Array, delim := ","):
 			text = str('"', text.replace('"', '""'), '"')
 		f.store_string(text)
 	f.store_string("\n")
-
